@@ -282,7 +282,7 @@
   /* Component R&R quote list */
   .comp-row{
     display:grid;
-    grid-template-columns: 1fr auto auto auto;
+    grid-template-columns: 1fr auto auto auto auto;
     gap:12px;
     align-items:center;
     padding:10px 0;
@@ -294,6 +294,26 @@
     border:1.5px solid var(--line);
     border-radius:7px;
     font-size:13.5px;
+  }
+  .comp-row .comp-hr-group{
+    display:flex;
+    align-items:center;
+    gap:5px;
+    background:var(--yellow-light);
+    border:1.5px solid var(--yellow);
+    border-radius:7px;
+    padding:4px 8px;
+  }
+  .comp-row .comp-hr-group select{
+    width:56px;
+    border:1.5px solid var(--line);
+    padding:4px 5px;
+    font-weight:600;
+  }
+  .comp-row .comp-hr-group .hr-unit{
+    font-size:12px;
+    color:var(--ink-soft);
+    white-space:nowrap;
   }
   .add-btn{
     background:var(--orange-dark);
@@ -424,7 +444,8 @@
             <option value="2.5">Prop Assembly w/ Constant Speed — 2.5 hrs</option>
           </select>
           <span></span><span></span>
-          <button class="add-btn" onclick="addComponent('c-prop-type', function(v){return {label: v==2?'Propeller Assembly':'Prop Assembly w/ Constant Speed', hours: parseFloat(v)};})">+ Add to Quote</button>
+          <span class="comp-hr-group"><select id="c-prop-hrs"></select><span class="hr-unit">hr</span></span>
+          <button class="add-btn" onclick="addComponent('c-prop-type', function(v){return {label: v==2?'Propeller Assembly':'Prop Assembly w/ Constant Speed', hours: parseFloat(v)};}, 'c-prop-hrs')">+ Add to Quote</button>
         </div>
       </div>
 
@@ -441,9 +462,10 @@
             <option value="2">2 cylinders</option>
           </select>
           <input type="number" id="c-cyl-extra" min="0" step="1" value="0" title="Additional cylinders beyond 2" style="width:90px;">
+          <span class="comp-hr-group"><select id="c-cyl-hrs"></select><span class="hr-unit">hr</span></span>
           <button class="add-btn" onclick="addCylinder()">+ Add to Quote</button>
         </div>
-        <p class="note">Extra field = additional cylinders beyond 2, billed at half the marginal per-cylinder rate (per shop note: "add 1/2 time for each additional cylinder").</p>
+        <p class="note">Extra field suggests a default via the shop note ("add 1/2 time for each additional cylinder") — the hr dropdown is the final billed quantity and can be overridden before adding.</p>
       </div>
 
       <div class="card">
@@ -456,8 +478,10 @@
             <option value="32">6-Cylinder, w/ Fuel Injection &amp; Turbo — 32 hrs</option>
           </select>
           <span></span><span></span>
-          <button class="add-btn" onclick="addComponent('c-engine-type', function(v){var m={16:'4-Cyl Engine R&R (No FI)',18:'4-Cyl Engine R&R (FI)',24:'6-Cyl Engine R&R (FI)',32:'6-Cyl Engine R&R (FI + Turbo)'}; return {label:m[v], hours:parseFloat(v)};})">+ Add to Quote</button>
+          <span class="comp-hr-group"><select id="c-engine-hrs"></select><span class="hr-unit">hr</span></span>
+          <button class="add-btn" onclick="addComponent('c-engine-type', function(v){var m={16:'4-Cyl Engine R&R (No FI)',18:'4-Cyl Engine R&R (FI)',24:'6-Cyl Engine R&R (FI)',32:'6-Cyl Engine R&R (FI + Turbo)'}; return {label:m[v], hours:parseFloat(v)};}, 'c-engine-hrs')">+ Add to Quote</button>
         </div>
+        <p class="note">Hours dropdown goes up to 25 to cover larger engine R&amp;R jobs.</p>
       </div>
 
       <div class="card">
@@ -468,18 +492,22 @@
             <option value="3">Alternator R&R — Gear Driven — 3.0 hrs</option>
           </select>
           <span></span><span></span>
-          <button class="add-btn" onclick="addComponent('c-alt-type', function(v){return {label: v=='3.5'?'Alternator R&R (Belt Driven)':'Alternator R&R (Gear Driven)', hours: parseFloat(v)};})">+ Add to Quote</button>
+          <span class="comp-hr-group"><select id="c-alt-hrs"></select><span class="hr-unit">hr</span></span>
+          <button class="add-btn" onclick="addComponent('c-alt-type', function(v){return {label: v=='3.5'?'Alternator R&R (Belt Driven)':'Alternator R&R (Gear Driven)', hours: parseFloat(v)};}, 'c-alt-hrs')">+ Add to Quote</button>
         </div>
         <div class="comp-row">
-          <div style="font-size:14px;">Oil Cooler R&amp;R — 4.0 hrs</div>
+          <div style="font-size:14px;">Oil Cooler R&amp;R</div>
           <span></span><span></span>
-          <button class="add-btn" onclick="addFixed('Oil Cooler R&R', 4)">+ Add to Quote</button>
+          <span class="comp-hr-group"><select id="c-oil-hrs"></select><span class="hr-unit">hr</span></span>
+          <button class="add-btn" onclick="addFixed('Oil Cooler R&R', 'c-oil-hrs')">+ Add to Quote</button>
         </div>
         <div class="comp-row">
-          <div style="font-size:14px;">Engine Mount R&amp;R — 25.0 hrs</div>
+          <div style="font-size:14px;">Engine Mount R&amp;R</div>
           <span></span><span></span>
-          <button class="add-btn" onclick="addFixed('Engine Mount R&R', 25)">+ Add to Quote</button>
+          <span class="comp-hr-group"><select id="c-mount-hrs"></select><span class="hr-unit">hr</span></span>
+          <button class="add-btn" onclick="addFixed('Engine Mount R&R', 'c-mount-hrs')">+ Add to Quote</button>
         </div>
+        <p class="note">Engine Mount R&amp;R hours dropdown goes up to 25.</p>
       </div>
 
       <div class="card">
@@ -727,24 +755,72 @@ function calcAnnual(){
   return {hours, days};
 }
 
-function addComponent(selectId, mapper){
+// ---- Component R&R hour-override dropdowns (1-9 by default, 1-25 for engine jobs) ----
+function fillHourOptions(id, max){
+  const el = document.getElementById(id);
+  let html = '';
+  for(let h=1; h<=max; h++) html += `<option value="${h}">${h}</option>`;
+  el.innerHTML = html;
+}
+function setHourDefault(id, val, max){
+  const el = document.getElementById(id);
+  const clamped = Math.min(max, Math.max(1, Math.round(val)));
+  el.value = String(clamped);
+}
+function initComponentHourSelects(){
+  fillHourOptions('c-prop-hrs', 9);
+  fillHourOptions('c-cyl-hrs', 9);
+  fillHourOptions('c-engine-hrs', 25);
+  fillHourOptions('c-alt-hrs', 9);
+  fillHourOptions('c-oil-hrs', 9);
+  fillHourOptions('c-mount-hrs', 25);
+
+  setHourDefault('c-prop-hrs', parseFloat(document.getElementById('c-prop-type').value), 9);
+  updateCylHoursDefault();
+  setHourDefault('c-engine-hrs', parseFloat(document.getElementById('c-engine-type').value), 25);
+  setHourDefault('c-alt-hrs', parseFloat(document.getElementById('c-alt-type').value), 9);
+  setHourDefault('c-oil-hrs', 4, 9);
+  setHourDefault('c-mount-hrs', 25, 25);
+
+  document.getElementById('c-prop-type').addEventListener('change', e=>{
+    setHourDefault('c-prop-hrs', parseFloat(e.target.value), 9);
+  });
+  document.getElementById('c-engine-type').addEventListener('change', e=>{
+    setHourDefault('c-engine-hrs', parseFloat(e.target.value), 25);
+  });
+  document.getElementById('c-alt-type').addEventListener('change', e=>{
+    setHourDefault('c-alt-hrs', parseFloat(e.target.value), 9);
+  });
+  document.getElementById('c-cyl-type').addEventListener('change', updateCylHoursDefault);
+  document.getElementById('c-cyl-qty').addEventListener('change', updateCylHoursDefault);
+  document.getElementById('c-cyl-extra').addEventListener('input', updateCylHoursDefault);
+}
+function updateCylHoursDefault(){
+  const [one, two] = document.getElementById('c-cyl-type').value.split(',').map(Number);
+  const qty = parseInt(document.getElementById('c-cyl-qty').value,10);
+  const extra = Math.max(0, parseInt(document.getElementById('c-cyl-extra').value||0,10));
+  const marginal = two - one;
+  const suggested = (qty===1? one : two) + extra*(marginal/2); // "add 1/2 time for each additional cylinder"
+  setHourDefault('c-cyl-hrs', suggested, 9);
+}
+
+function addComponent(selectId, mapper, hoursId){
   const v = document.getElementById(selectId).value;
   const item = mapper(v);
+  if(hoursId){ item.hours = parseFloat(document.getElementById(hoursId).value); }
   componentItems.push(item);
   renderAll();
 }
-function addFixed(label, hours){
+function addFixed(label, hoursId){
+  const hours = parseFloat(document.getElementById(hoursId).value);
   componentItems.push({label, hours});
   renderAll();
 }
 function addCylinder(){
-  const [one, two] = document.getElementById('c-cyl-type').value.split(',').map(Number);
   const injLabel = document.getElementById('c-cyl-type').selectedOptions[0].textContent;
   const qty = parseInt(document.getElementById('c-cyl-qty').value,10);
   const extra = Math.max(0, parseInt(document.getElementById('c-cyl-extra').value||0,10));
-  let hours = qty===1? one : two;
-  const marginal = two - one;
-  hours += extra * (marginal/2); // "add 1/2 time for each additional cylinder"
+  const hours = parseFloat(document.getElementById('c-cyl-hrs').value);
   let label = `Cylinder R&R — ${injLabel} — ${qty} cyl${extra>0? ' + '+extra+' extra':''}`;
   componentItems.push({label, hours});
   renderAll();
@@ -815,6 +891,7 @@ function resetAll(){
   renderAll();
 }
 
+initComponentHourSelects();
 renderAll();
 
 /* =========================================================================
