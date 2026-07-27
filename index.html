@@ -145,6 +145,29 @@
     color:var(--ink-soft);
     font-variant-numeric:tabular-nums;
   }
+  .opt .hr-group{
+    margin-left:auto;
+    display:flex;
+    align-items:center;
+    gap:4px;
+    flex:none;
+  }
+  .opt select.hr-select{
+    font-size:12.5px;
+    color:var(--ink);
+    font-weight:600;
+    border:1.5px solid var(--line);
+    border-radius:6px;
+    padding:3px 5px;
+    background:#fff;
+    cursor:pointer;
+    font-variant-numeric:tabular-nums;
+  }
+  .opt select.hr-select:hover{border-color:var(--orange);}
+  .opt .hr-unit{
+    font-size:11.5px;
+    color:var(--ink-soft);
+  }
   .note{
     font-size:12.5px;
     color:var(--ink-soft);
@@ -573,6 +596,17 @@ const equip = [
   {id:'ap', label:'Autopilot', hours:1, days:0.25},
 ];
 
+// Builds the starting hour-override map from each group's default "hours" value.
+// Every editable item (all except the dynamic Twin Engine entry) gets a 1-9 dropdown
+// so the mechanic can adjust the billed hour quantity per item.
+function defaultHourOverrides(){
+  const map = {};
+  [...propBlades, ...constSpeed, ...engineCyl, ...gear, ...wings, ...fuselage, ...equip].forEach(it=>{
+    if(it.hours!=null) map[it.id] = it.hours;
+  });
+  return map;
+}
+
 const state = {
   propBlade: 'b3',
   constSpeed: false,
@@ -582,11 +616,37 @@ const state = {
   wing: 'wl',
   fuselage: 'fl',
   equip: {emp:true, oxy:true, ams:false, tks:false, tail:true, ap:true},
+  hourOverrides: defaultHourOverrides(),
 };
 
 const componentItems = []; // {label, hours}
 
 /* ---------------- Rendering ---------------- */
+
+// Builds a 1-9 hour-quantity <select> for an editable item, or an empty string
+// for items with no fixed hours (e.g. the dynamic Twin Engine entry).
+function hrGroupHtml(it){
+  if(it.hours==null) return '<span class="hrs"></span>';
+  let opts = '';
+  for(let h=1; h<=9; h++) opts += `<option value="${h}">${h}</option>`;
+  return `<span class="hr-group"><select class="hr-select" data-hr-id="${it.id}">${opts}</select><span class="hr-unit">hr</span></span>`;
+}
+
+// Wires the hour <select> inside a just-built option label: sets its current
+// value from state and stops clicks from toggling the radio/checkbox behind it.
+function wireHrSelect(label, id){
+  const sel = label.querySelector('select.hr-select');
+  if(!sel) return;
+  const current = state.hourOverrides[id];
+  sel.value = String(current!=null ? current : 1);
+  sel.addEventListener('click', e=> e.stopPropagation());
+  sel.addEventListener('mousedown', e=> e.stopPropagation());
+  sel.addEventListener('change', e=>{
+    e.stopPropagation();
+    state.hourOverrides[id] = parseInt(e.target.value, 10);
+    renderAll();
+  });
+}
 
 function radioGroup(container, items, groupName, selectedId, onChange){
   const el = document.getElementById(container);
@@ -595,8 +655,9 @@ function radioGroup(container, items, groupName, selectedId, onChange){
     const label = document.createElement('label');
     label.className = 'opt' + (selectedId===it.id ? ' checked':'');
     label.innerHTML = `<input type="radio" name="${groupName}" ${selectedId===it.id?'checked':''}>
-      <span>${it.label}</span><span class="hrs">${it.hours!=null? it.hours.toFixed(2)+' hr':''}</span>`;
+      <span>${it.label}</span>${hrGroupHtml(it)}`;
     label.querySelector('input').addEventListener('change', ()=>{ onChange(it.id); renderAll(); });
+    wireHrSelect(label, it.id);
     el.appendChild(label);
   });
 }
@@ -609,8 +670,9 @@ function checkGroup(container, items, selectedMap, onChange){
     const label = document.createElement('label');
     label.className = 'opt' + (checked ? ' checked':'');
     label.innerHTML = `<input type="checkbox" ${checked?'checked':''}>
-      <span>${it.label}</span><span class="hrs">${it.hours!=null? it.hours.toFixed(2)+' hr':''}</span>`;
+      <span>${it.label}</span>${hrGroupHtml(it)}`;
     label.querySelector('input').addEventListener('change', (e)=>{ onChange(it.id, e.target.checked); renderAll(); });
+    wireHrSelect(label, it.id);
     el.appendChild(label);
   });
 }
@@ -632,29 +694,30 @@ function find(arr,id){ return arr.find(x=>x.id===id); }
 
 function calcAnnual(){
   let hours = 0, days = 0;
+  const H = id => state.hourOverrides[id]; // current (possibly user-edited) hour quantity for an item
 
-  const blade = find(propBlades, state.propBlade);
-  hours += blade.hours; days += blade.hours/4;               // H13 divisor 4
+  const bladeHrs = H(state.propBlade);
+  hours += bladeHrs; days += bladeHrs/4;                      // H13 divisor 4
 
-  if(state.constSpeed){ hours += 1; days += 1/4; }            // constant speed inside same /4 group
+  if(state.constSpeed){ const csHrs = H('cs'); hours += csHrs; days += csHrs/4; } // constant speed inside same /4 group
 
-  const eng = find(engineCyl, state.engine);
-  hours += eng.hours; days += eng.hours/6;                    // O13 divisor 6
+  const engHrs = H(state.engine);
+  hours += engHrs; days += engHrs/6;                          // O13 divisor 6
 
-  if(state.twin){ hours += eng.hours; }                       // Q10: adds matching engine hours again, no day impact
+  if(state.twin){ hours += engHrs; }                          // Q10: adds matching engine hours again, no day impact
 
-  const g = find(gear, state.gear);
-  hours += g.hours; days += g.hours/6;                        // O20 divisor 6
+  const gearHrs = H(state.gear);
+  hours += gearHrs; days += gearHrs/6;                        // O20 divisor 6
 
-  const w = find(wings, state.wing);
-  hours += w.hours; days += w.hours/4;                        // H26 divisor 4
+  const wingHrs = H(state.wing);
+  hours += wingHrs; days += wingHrs/4;                        // H26 divisor 4
 
-  const f = find(fuselage, state.fuselage);
-  hours += f.hours; days += f.hours/4;                        // O26 divisor 4
+  const fuseHrs = H(state.fuselage);
+  hours += fuseHrs; days += fuseHrs/4;                        // O26 divisor 4
 
   equip.forEach(it=>{
-    if(state.equip[it.id]) hours += it.hours;                 // hours only if equipped
-    days += it.days;                                          // days always (matches spreadsheet)
+    if(state.equip[it.id]) hours += H(it.id);                 // hours only if equipped (uses edited quantity)
+    days += it.days;                                          // days always (matches spreadsheet, not user-editable)
   });
 
   // Always-included baseline
@@ -747,6 +810,7 @@ function resetAll(){
   state.propBlade='b3'; state.constSpeed=false; state.engine='e6'; state.twin=true;
   state.gear='gf'; state.wing='wl'; state.fuselage='fl';
   state.equip = {emp:true, oxy:true, ams:false, tks:false, tail:true, ap:true};
+  state.hourOverrides = defaultHourOverrides();
   componentItems.length = 0;
   renderAll();
 }
