@@ -1009,27 +1009,30 @@ function _table(rowsXml, opt={}){
   ${rowsXml.join('')}</w:tbl>`;
 }
 
-// ---- palette (matches app theme) ----
+// ---- palette (navy & gold, matching the shop's "annual quote form" reference) ----
 const DOCX_C = {
-  orangeDark:'C9640A', orange:'F5820A', yellow:'FFC93C',
-  yellowLight:'FFF4D6', cream:'FFFBF0', white:'FFFFFF',
-  ink:'241C14', inkSoft:'5A4C3C',
+  navy:'1F3864', gold:'B8860B',
+  rowTint:'DEE6F2', white:'FFFFFF',
+  ink:'1A1A1A', inkSoft:'555555',
 };
 
+function _hr(color, sz){
+  return `<w:p><w:pPr><w:spacing w:after="200"/><w:pBdr><w:bottom w:val="single" w:sz="${sz||10}" w:color="${color}" w:space="1"/></w:pBdr></w:pPr></w:p>`;
+}
 function _sectionHeading(text){
-  return _para(_run(text, {bold:true, color:DOCX_C.orangeDark, size:24}), {spacingBefore:240, spacingAfter:100});
+  return `<w:p><w:pPr><w:spacing w:before="260" w:after="120"/><w:pBdr><w:bottom w:val="single" w:sz="8" w:color="${DOCX_C.gold}" w:space="4"/></w:pBdr></w:pPr>${_run(text, {bold:true, color:DOCX_C.navy, size:26})}</w:p>`;
 }
 function _labelValueRow(pairs, widths){
   const w = widths || [1600,2775,1600,2775];
   const cells = [];
   pairs.forEach(([label, value], i)=>{
-    cells.push(_cell(_para(_run(label, {bold:true, color:DOCX_C.orangeDark, size:16})), {width:w[i*2], fill:DOCX_C.yellowLight, margins:100}));
-    cells.push(_cell(_para(_run(value, {size:18, color:DOCX_C.ink})), {width:w[i*2+1], margins:100}));
+    cells.push(_cell(_para(_run(label, {bold:true, color:DOCX_C.white, size:15})), {width:w[i*2], fill:DOCX_C.navy, margins:100}));
+    cells.push(_cell(_para(_run(value, {size:17, color:DOCX_C.ink})), {width:w[i*2+1], margins:100}));
   });
   return _row(cells);
 }
 
-// Build the human-readable "Scope of Inspection" + labor lines from current app state
+// Build the human-readable scope/labor/component content from current app state
 function buildQuoteContent(){
   const rate = parseFloat(document.getElementById('f-rate').value)||0;
   const parts = parseFloat(document.getElementById('f-parts').value)||0;
@@ -1053,131 +1056,174 @@ function buildQuoteContent(){
   if(state.equip.emp) scopeItems.push({item:'Empennage Inspection', desc:'Inspection of empennage structure, control surfaces, and attach hardware for condition and security.'});
   if(state.equip.tail) scopeItems.push({item:'Tail Section Equipment Inspection', desc:'Inspection of tail section-mounted equipment and related systems for condition and proper operation.'});
   scopeItems.push({item:'AD Compliance History Search', desc:'Research and review of Airworthiness Directive compliance history for airframe, engine, propeller, and appliances; preparation of an updated AD compliance record.'});
-  componentItems.forEach(it=>{
-    scopeItems.push({item:it.label, desc:'Removal and replacement per manufacturer maintenance data (see Quotation section for labor hours).'});
-  });
 
-  const laborLines = [
-    {label:`Annual Inspection — ${model} (flat rate, all items listed above)`, amount:`${annual.hours.toFixed(2)} hrs`},
-  ];
-  componentItems.forEach(it=>{
-    laborLines.push({label:it.label, amount:`${it.hours.toFixed(2)} hrs`});
-  });
   const fmtMoney = n => '$' + n.toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2});
-  laborLines.push({label:'Labor Rate', amount:`${fmtMoney(rate)} / hr`});
+
+  const componentLines = componentItems.map(it => ({
+    label: it.label,
+    hours: `${it.hours.toFixed(2)} hrs`,
+    price: fmtMoney(it.hours*rate),
+  }));
+
   const compHours = componentItems.reduce((s,it)=>s+it.hours,0);
   const totalHours = annual.hours + compHours;
   const laborCost = totalHours * rate;
-  laborLines.push({label:'Labor Subtotal', amount:fmtMoney(laborCost)});
-  laborLines.push({label:'Parts / Materials', amount:fmtMoney(parts)});
   const totalPrice = fmtMoney(laborCost+parts);
 
   const downtime = `${annual.days.toFixed(2)} estimated shop days (approx. ${Math.ceil(annual.days)} business days) from aircraft drop-off, barring discrepancies requiring additional repair or parts procurement.`;
 
-  return {scopeItems, laborLines, totalPrice, downtime, model};
+  return {
+    scopeItems, componentLines, model,
+    aircraftCategory: state.twin ? 'Multi-Engine Piston' : 'Single-Engine Piston',
+    annualHoursStr: `${annual.hours.toFixed(2)} hrs`,
+    rateStr: `${fmtMoney(rate)}/hr`,
+    laborTotalStr: fmtMoney(annual.hours*rate),
+    totalHoursStr: `${totalHours.toFixed(2)} hrs`,
+    laborSubtotalStr: fmtMoney(laborCost),
+    partsStr: fmtMoney(parts),
+    totalPrice, downtime,
+  };
 }
 
 function _buildDocumentXml(data){
   const C = DOCX_C;
 
-  const shopBanner = _table([
-    _row([ _cell(
-      _para(_run(data.shopName || 'Your Shop Name', {bold:true, color:C.white, size:32}), {align:'center'}) +
-      _para(_run('Annual Inspection Quote', {color:C.yellow, size:20}), {align:'center', spacingAfter:60}) +
-      _para(_run([data.shopAddress, data.shopPhone, data.shopEmail].filter(Boolean).join('  ·  '), {color:C.cream, size:16}), {align:'center'})
-    , {fill:C.orangeDark, margins:200}) ])
+  // Header: shop name/credentials (left) + address block (right)
+  const headerBlock = _table([
+    _row([
+      _cell(
+        _para(_run(data.shopName || 'Your Shop Name', {bold:true, color:C.navy, size:34})) +
+        _para(_run(data.preparedBy ? `${data.preparedBy} — Certificated Airframe & Powerplant Mechanic` : 'Certificated Airframe & Powerplant Mechanic — Inspection Authorization', {color:C.inkSoft, size:16}), {spacingBefore:40})
+      , {width:5670}),
+      _cell(
+        _para(_run(data.shopAddress||'', {color:C.inkSoft, size:16}), {align:'right'}) +
+        _para(_run([data.shopPhone, data.shopEmail].filter(Boolean).join('  |  '), {color:C.inkSoft, size:16}), {align:'right', spacingBefore:20})
+      , {width:3680})
+    ])
   ], {noBorders:true});
 
-  const titleBar = _table([
-    _row([ _cell(_para(_run('MAINTENANCE QUOTATION', {bold:true, color:C.orangeDark, size:26}), {align:'center'}), {fill:C.yellow, margins:120}) ])
+  // Title: "Price Quote" (left) + Quote Date / Valid Through (right)
+  const titleBlock = _table([
+    _row([
+      _cell(
+        _para(_run('Price Quote', {bold:true, color:C.navy, size:32})) +
+        _para(_run(`Annual Inspection — ${data.makeModel||'Aircraft'}`, {color:C.inkSoft, size:18}), {spacingBefore:20})
+      , {width:5670}),
+      _cell(
+        _para(_run('Quote Date:  ', {bold:true, color:C.navy, size:17}) + _run(data.date, {size:17, color:C.ink}), {align:'right'}) +
+        _para(_run('Valid Through:  ', {bold:true, color:C.navy, size:17}) + _run(data.validThru, {size:17, color:C.ink}), {align:'right', spacingBefore:20})
+      , {width:3680})
+    ])
   ], {noBorders:true});
 
-  const quoteInfo = _table([
-    _labelValueRow([['QUOTE NO.', data.quoteNo],['CUSTOMER', data.customerName]]),
-    _labelValueRow([['DATE', data.date],['ADDRESS', data.customerAddress]]),
-    _labelValueRow([['VALID THRU', data.validThru],['PHONE', data.customerPhone]]),
-    _labelValueRow([['PREPARED BY', data.preparedBy],['EMAIL', data.customerEmail]]),
-  ]);
+  const infoTable = _table([
+    _labelValueRow([['MAKE / MODEL', data.makeModel],['REGISTRATION', data.registration]]),
+    _labelValueRow([['SERIAL NUMBER', data.serialNumber],['TOTAL TIME', data.totalTime]]),
+    _labelValueRow([['CUSTOMER', data.customerName],['PHONE', data.customerPhone]]),
+    _labelValueRow([['ADDRESS', data.customerAddress],['EMAIL', data.customerEmail]]),
+    _labelValueRow([['PREPARED BY', data.preparedBy],['QUOTE NO.', data.quoteNo]]),
+  ], {borderColor:C.rowTint});
 
-  const aircraftInfo = _table([
+  const rateSummaryTable = _table([
     _row([
-      _cell(_para(_run('MAKE / MODEL', {bold:true, color:C.white, size:16})), {fill:C.orangeDark, width:2337, margins:100}),
-      _cell(_para(_run('REGISTRATION', {bold:true, color:C.white, size:16})), {fill:C.orangeDark, width:2338, margins:100}),
-      _cell(_para(_run('SERIAL NUMBER', {bold:true, color:C.white, size:16})), {fill:C.orangeDark, width:2337, margins:100}),
-      _cell(_para(_run('TOTAL TIME', {bold:true, color:C.white, size:16})), {fill:C.orangeDark, width:2338, margins:100}),
+      _cell(_para(_run('AIRCRAFT CATEGORY', {bold:true, color:C.white, size:14})), {fill:C.navy, width:2100, margins:100}),
+      _cell(_para(_run('INSPECTION TYPE', {bold:true, color:C.white, size:14})), {fill:C.navy, width:2100, margins:100}),
+      _cell(_para(_run('LABOR RATE', {bold:true, color:C.white, size:14})), {fill:C.navy, width:1700, margins:100}),
+      _cell(_para(_run('EST. HOURS', {bold:true, color:C.white, size:14})), {fill:C.navy, width:1700, margins:100}),
+      _cell(_para(_run('ESTIMATED LABOR TOTAL', {bold:true, color:C.white, size:14})), {fill:C.navy, width:1750, margins:100}),
     ]),
     _row([
-      _cell(_para(_run(data.makeModel, {size:18})), {width:2337, margins:100}),
-      _cell(_para(_run(data.registration, {size:18})), {width:2338, margins:100}),
-      _cell(_para(_run(data.serialNumber, {size:18})), {width:2337, margins:100}),
-      _cell(_para(_run(data.totalTime, {size:18})), {width:2338, margins:100}),
+      _cell(_para(_run(data.aircraftCategory, {size:16})), {width:2100, margins:100}),
+      _cell(_para(_run('Annual Inspection', {size:16})), {width:2100, margins:100}),
+      _cell(_para(_run(data.rateStr, {size:16})), {width:1700, margins:100}),
+      _cell(_para(_run(data.annualHoursStr, {size:16})), {width:1700, margins:100}),
+      _cell(_para(_run(data.laborTotalStr, {bold:true, size:16, color:C.navy})), {width:1750, margins:100}),
     ]),
-  ]);
+  ], {borderColor:C.rowTint});
 
   const scopeRows = [ _row([
-      _cell(_para(_run('ITEM', {bold:true, color:C.white, size:16})), {fill:C.orangeDark, width:2500, margins:100}),
-      _cell(_para(_run('DESCRIPTION OF WORK', {bold:true, color:C.white, size:16})), {fill:C.orangeDark, width:6850, margins:100}),
+      _cell(_para(_run('ITEM', {bold:true, color:C.white, size:15})), {fill:C.navy, width:2500, margins:100}),
+      _cell(_para(_run('DESCRIPTION OF WORK', {bold:true, color:C.white, size:15})), {fill:C.navy, width:6850, margins:100}),
   ]) ];
   data.scopeItems.forEach((it,idx)=>{
     scopeRows.push(_row([
-      _cell(_para(_run(it.item, {bold:true, color:C.ink, size:17})), {width:2500, fill: idx%2? C.yellowLight: C.cream, margins:100}),
-      _cell(_para(_run(it.desc, {size:17, color:C.ink})), {width:6850, fill: idx%2? C.yellowLight: C.cream, margins:100}),
+      _cell(_para(_run(it.item, {bold:true, color:C.ink, size:16})), {width:2500, fill: idx%2? C.rowTint: C.white, margins:100}),
+      _cell(_para(_run(it.desc, {size:16, color:C.ink})), {width:6850, fill: idx%2? C.rowTint: C.white, margins:100}),
     ]));
   });
-  const scopeTable = _table(scopeRows);
+  const scopeTable = _table(scopeRows, {borderColor:C.rowTint});
 
-  const laborRows = [ _row([
-      _cell(_para(_run('LABOR SUMMARY', {bold:true, color:C.white, size:16})), {fill:C.orangeDark, width:6850, margins:100}),
-      _cell(_para(_run('AMOUNT', {bold:true, color:C.white, size:16})), {fill:C.orangeDark, width:2500, margins:100}),
-  ]) ];
-  data.laborLines.forEach((l,idx)=>{
-    laborRows.push(_row([
-      _cell(_para(_run(l.label, {size:17})), {width:6850, fill: idx%2? C.yellowLight:C.cream, margins:100}),
-      _cell(_para(_run(l.amount, {size:17}), {align:'right'}), {width:2500, fill: idx%2? C.yellowLight:C.cream, margins:100}),
-    ]));
-  });
-  laborRows.push(_row([
-    _cell(_para(_run('TOTAL QUOTED PRICE', {bold:true, color:C.white, size:20})), {fill:C.orangeDark, width:6850, margins:100}),
-    _cell(_para(_run(data.totalPrice, {bold:true, color:C.white, size:20}), {align:'right'}), {fill:C.orangeDark, width:2500, margins:100}),
-  ]));
-  const laborTable = _table(laborRows);
+  let componentSection = '';
+  if(data.componentLines.length){
+    const compRows = [ _row([
+      _cell(_para(_run('COMPONENT', {bold:true, color:C.white, size:15})), {fill:C.navy, width:4000, margins:100}),
+      _cell(_para(_run('EST. LABOR HOURS', {bold:true, color:C.white, size:15})), {fill:C.navy, width:2675, margins:100}),
+      _cell(_para(_run('FLAT LABOR PRICE', {bold:true, color:C.white, size:15})), {fill:C.navy, width:2675, margins:100}),
+    ]) ];
+    data.componentLines.forEach((l,idx)=>{
+      compRows.push(_row([
+        _cell(_para(_run(l.label, {size:16})), {width:4000, fill: idx%2? C.rowTint:C.white, margins:100}),
+        _cell(_para(_run(l.hours, {size:16}), {align:'right'}), {width:2675, fill: idx%2? C.rowTint:C.white, margins:100}),
+        _cell(_para(_run(l.price, {size:16}), {align:'right'}), {width:2675, fill: idx%2? C.rowTint:C.white, margins:100}),
+      ]));
+    });
+    componentSection = _sectionHeading('Component Remove & Replace') +
+      _para(_run('Flat-rate pricing below covers labor for removal and reinstallation of the components selected for this quote. Parts are billed separately at cost plus standard markup (see Terms).', {size:17, color:C.inkSoft}), {spacingAfter:120}) +
+      _table(compRows, {borderColor:C.rowTint});
+  }
+
+  const summaryTable = _table([
+    _row([
+      _cell(_para(_run('Total Labor Hours', {size:17})), {width:6850, fill:C.white, margins:100}),
+      _cell(_para(_run(data.totalHoursStr, {size:17}), {align:'right'}), {width:2500, fill:C.white, margins:100}),
+    ]),
+    _row([
+      _cell(_para(_run('Labor Rate', {size:17})), {width:6850, fill:C.rowTint, margins:100}),
+      _cell(_para(_run(data.rateStr, {size:17}), {align:'right'}), {width:2500, fill:C.rowTint, margins:100}),
+    ]),
+    _row([
+      _cell(_para(_run('Labor Subtotal', {size:17})), {width:6850, fill:C.white, margins:100}),
+      _cell(_para(_run(data.laborSubtotalStr, {size:17}), {align:'right'}), {width:2500, fill:C.white, margins:100}),
+    ]),
+    _row([
+      _cell(_para(_run('Parts / Materials', {size:17})), {width:6850, fill:C.rowTint, margins:100}),
+      _cell(_para(_run(data.partsStr, {size:17}), {align:'right'}), {width:2500, fill:C.rowTint, margins:100}),
+    ]),
+    _row([
+      _cell(_para(_run('TOTAL QUOTED PRICE', {bold:true, color:C.white, size:20})), {fill:C.navy, width:6850, margins:100}),
+      _cell(_para(_run(data.totalPrice, {bold:true, color:C.white, size:20}), {align:'right'}), {fill:C.navy, width:2500, margins:100}),
+    ]),
+  ], {borderColor:C.rowTint});
 
   const scheduleTable = _table([
     _row([
-      _cell(_para(_run('ESTIMATED DOWNTIME', {bold:true, color:C.orangeDark, size:16})), {fill:C.yellowLight, width:2800, margins:100}),
-      _cell(_para(_run(data.downtime, {size:17})), {width:6550, margins:100}),
+      _cell(_para(_run('ESTIMATED DOWNTIME', {bold:true, color:C.white, size:15})), {fill:C.navy, width:2800, margins:100}),
+      _cell(_para(_run(data.downtime, {size:16})), {width:6550, margins:100}),
     ]),
     _row([
-      _cell(_para(_run('SCHEDULED START', {bold:true, color:C.orangeDark, size:16})), {fill:C.yellowLight, width:2800, margins:100}),
-      _cell(_para(_run(data.scheduledStart, {size:17})), {width:6550, margins:100}),
+      _cell(_para(_run('SCHEDULED START', {bold:true, color:C.white, size:15})), {fill:C.navy, width:2800, margins:100}),
+      _cell(_para(_run(data.scheduledStart, {size:16})), {width:6550, margins:100}),
     ]),
-  ]);
+  ], {borderColor:C.rowTint});
 
-  const termsParas = data.terms.map(t=> _para(_run('–  ', {bold:true, color:C.orangeDark}) + _run(t, {size:16, color:C.inkSoft}), {spacingAfter:80}) ).join('');
-
-  const acceptanceTable = _table([
-    _row([
-      _cell(_para(_run('X', {color:C.inkSoft})) + _para(_run('Owner / Authorized Representative', {size:15, color:C.inkSoft})), {width:4675, margins:200}),
-      _cell(_para(_run('X', {color:C.inkSoft})) + _para(_run('Date', {size:15, color:C.inkSoft})), {width:4675, margins:200}),
-    ]),
-    _row([
-      _cell(_para(_run('X', {color:C.inkSoft})) + _para(_run('Inspection Authorization Holder', {size:15, color:C.inkSoft})), {width:4675, margins:200}),
-      _cell(_para(_run('X', {color:C.inkSoft})) + _para(_run('Date', {size:15, color:C.inkSoft})), {width:4675, margins:200}),
-    ]),
-  ]);
+  const termsParas = data.terms.map(t=> _para(_run('•  ', {bold:true, color:C.gold}) + _run(t, {size:16, color:C.inkSoft}), {spacingAfter:80}) ).join('');
 
   const body = [
-    shopBanner, _para(_run('')), titleBar, _para(_run('')),
-    _sectionHeading('Quote Details'), quoteInfo,
-    _sectionHeading('Aircraft Information'), aircraftInfo,
-    _sectionHeading('Scope of Inspection'), scopeTable,
-    _sectionHeading('Quotation'), laborTable,
+    headerBlock, _hr(C.gold, 12),
+    titleBlock, _para(_run('')),
+    _sectionHeading('Aircraft & Customer Information'), infoTable,
+    _sectionHeading('Inspection Labor & Scope'),
+    _para(_run('This annual inspection is billed at an hourly labor rate, with estimated hours shown below based on the aircraft configuration selected. Final invoice reflects actual hours worked; any additional discrepancies found during inspection are quoted separately per the policy below.', {size:17, color:C.inkSoft}), {spacingAfter:120}),
+    rateSummaryTable, _para(_run('')),
+    scopeTable,
+    componentSection,
+    _sectionHeading('Quotation Summary'), summaryTable,
     _sectionHeading('Schedule'), scheduleTable,
-    _sectionHeading('Terms & Conditions'), termsParas,
-    _sectionHeading('Acceptance'),
-    _para(_run('By signing below, the owner or authorized representative accepts this quotation and authorizes the work described herein.', {size:17})),
-    _para(_run('')), acceptanceTable, _para(_run('')),
-    _para(_run('Thank you for the opportunity to service your aircraft.', {italic:true, color:C.orangeDark, size:18}), {align:'center', spacingBefore:200}),
+    _sectionHeading('Discrepancy & Squawk Repair Policy'),
+    _para(_run('This quote covers the base inspection only. Any airworthiness discrepancies discovered during the inspection will be documented and reviewed with the owner before further work begins. Repair of discrepancies is billed separately at the hourly labor rate above, plus parts. No repair work beyond the inspection scope will be performed without owner authorization.', {size:17, color:C.inkSoft})),
+    _sectionHeading('Terms & Payment Policy'), termsParas,
+    _hr(C.gold, 8),
+    _para(_run('Quote valid for 30 days from the date shown above. Thank you for trusting your aircraft’s airworthiness to our shop.', {italic:true, color:C.inkSoft, size:16}), {align:'center', spacingBefore:100}),
   ].join('');
 
   return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
@@ -1217,17 +1263,24 @@ function downloadQuoteDocx(){
     totalTime: document.getElementById('f-total-time').value,
     scheduledStart: document.getElementById('f-scheduled-start').value || 'TBD upon acceptance',
     scopeItems: content.scopeItems,
-    laborLines: content.laborLines,
+    componentLines: content.componentLines,
+    aircraftCategory: content.aircraftCategory,
+    annualHoursStr: content.annualHoursStr,
+    rateStr: content.rateStr,
+    laborTotalStr: content.laborTotalStr,
+    totalHoursStr: content.totalHoursStr,
+    laborSubtotalStr: content.laborSubtotalStr,
+    partsStr: content.partsStr,
     totalPrice: content.totalPrice,
     downtime: content.downtime,
     terms: [
-      'This quotation covers inspection labor only. Parts, consumables, shop supplies, and any repairs or corrective action arising from discrepancies found during the inspection are not included and will be quoted separately.',
-      'Any discrepancy requiring corrective action will be documented and presented to the owner for approval prior to the start of that work.',
-      'Airworthiness Directive compliance is limited to research and record review. Labor and parts required to comply with any outstanding AD are billed separately.',
+      'Parts, consumables, and shop supplies used during the inspection are billed separately from labor and are not included in this quote.',
+      'Parts and materials are billed at cost plus a 15% handling markup.',
+      'Airworthiness Directive compliance is limited to research and record review; labor and parts required to comply with any outstanding AD are billed separately.',
       'The owner is responsible for providing all aircraft logbooks and maintenance records prior to the start of the inspection.',
-      'Estimated downtime assumes normal parts availability and no significant discrepancies. Delays caused by parts backorder or owner-approved additional work will extend the schedule.',
-      'Quotation is valid for 30 days from the date shown above.',
-      'All work is performed in accordance with 14 CFR Part 43 and applicable manufacturer maintenance data.',
+      'Payment is due in full upon completion of work and prior to aircraft release. Accepted payment methods: cash, check, or card (3% processing fee applies to card payments).',
+      'A deposit of 25% may be requested for inspections requiring pre-ordered parts.',
+      'Estimated downtime assumes normal parts availability and no significant discrepancies; delays caused by parts backorder or owner-approved additional work will extend the schedule. This quote is an estimate and actual charges may vary based on aircraft condition and discrepancies found.',
     ],
   };
 
