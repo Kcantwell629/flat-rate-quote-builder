@@ -360,13 +360,46 @@
   }
   .subtle{font-size:12px; color:var(--ink-soft);}
 
+  /* ---- Print quote (navy & gold, matches the shop's "annual quote form" reference) ---- */
+  #print-quote{display:none;}
+  #print-quote .pq-header{
+    display:flex; justify-content:space-between; align-items:flex-start;
+    border-bottom:3px solid #B8860B; padding-bottom:14px; margin-bottom:18px;
+  }
+  #print-quote .pq-shop-name{font-size:26px; font-weight:800; color:#1F3864; margin:0;}
+  #print-quote .pq-shop-tagline{font-size:12.5px; color:#555; margin:4px 0 0;}
+  #print-quote .pq-shop-contact{font-size:12.5px; color:#555; text-align:right; line-height:1.6;}
+  #print-quote .pq-title-row{display:flex; justify-content:space-between; align-items:flex-end; margin-bottom:22px;}
+  #print-quote .pq-title{font-size:22px; font-weight:800; color:#1F3864; margin:0;}
+  #print-quote .pq-subtitle{font-size:13px; color:#555; margin:2px 0 0;}
+  #print-quote .pq-quote-meta{font-size:12.5px; text-align:right; color:#222; line-height:1.6;}
+  #print-quote .pq-quote-meta b{color:#1F3864;}
+  #print-quote .pq-section{font-size:16px; font-weight:800; color:#1F3864; border-bottom:2px solid #B8860B; padding-bottom:5px; margin:22px 0 10px;}
+  #print-quote .pq-note{font-size:12.5px; color:#555; margin:0 0 10px; line-height:1.5;}
+  #print-quote table{width:100%; border-collapse:collapse; margin-bottom:14px; font-size:12.5px; page-break-inside:auto;}
+  #print-quote table tr{page-break-inside:avoid;}
+  #print-quote table th{background:#1F3864; color:#fff; text-align:left; padding:7px 8px; font-size:11px; text-transform:uppercase; letter-spacing:0.3px;}
+  #print-quote table td{padding:7px 8px; border-bottom:1px solid #DEE6F2; vertical-align:top;}
+  #print-quote table.pq-striped tr:nth-child(even) td{background:#DEE6F2;}
+  #print-quote table.pq-info-table td.pq-label{background:#1F3864; color:#fff; font-weight:700; width:16%;}
+  #print-quote table.pq-info-table td:not(.pq-label){width:34%;}
+  #print-quote table.pq-rate-table td:nth-child(3), #print-quote table.pq-rate-table td:nth-child(4), #print-quote table.pq-rate-table td:nth-child(5){text-align:right;}
+  #print-quote table.pq-comp-table td:nth-child(2), #print-quote table.pq-comp-table td:nth-child(3){text-align:right;}
+  #print-quote table.pq-summary-table td{border-bottom:1px solid #DEE6F2;}
+  #print-quote table.pq-summary-table tr:nth-child(even) td{background:#DEE6F2;}
+  #print-quote table.pq-summary-table td:last-child{text-align:right;}
+  #print-quote table.pq-summary-table td.pq-total{background:#1F3864; color:#fff; font-weight:800; font-size:14px; border-bottom:none;}
+  #print-quote table.pq-schedule-table td.pq-label{background:#1F3864; color:#fff; font-weight:700; width:20%;}
+  #print-quote .pq-terms{list-style:none; padding:0; margin:0 0 6px; font-size:12.5px; color:#555;}
+  #print-quote .pq-terms li{margin-bottom:6px; padding-left:16px; position:relative; line-height:1.5;}
+  #print-quote .pq-terms li:before{content:"\2022"; color:#B8860B; position:absolute; left:0; font-weight:800;}
+  #print-quote .pq-footer{border-top:2px solid #B8860B; margin-top:16px; padding-top:10px; text-align:center; font-size:12px; font-style:italic; color:#555;}
+
+  @page{ margin:0.6in; }
   @media print{
-    header, .tabs, .add-btn, .rm-btn, .print-btn, .reset-btn, .comp-row{display:none !important;}
-    body{background:#fff;}
-    .wrap{grid-template-columns:1fr; max-width:100%;}
-    .panel{display:block !important;}
-    .card{box-shadow:none; border:1px solid #ccc;}
-    .summary{position:static;}
+    body *{visibility:hidden;}
+    #print-quote, #print-quote *{visibility:visible;}
+    #print-quote{display:block; position:absolute; left:0; top:0; width:100%;}
   }
 </style>
 </head>
@@ -574,11 +607,13 @@
       </div>
 
       <button class="print-btn" onclick="downloadQuoteDocx()">Download Quote (.docx)</button>
-      <button class="print-btn" style="background:linear-gradient(135deg, var(--yellow), var(--orange));" onclick="window.print()">Print / Save Quote (PDF)</button>
+      <button class="print-btn" style="background:linear-gradient(135deg, var(--yellow), var(--orange));" onclick="printQuote()">Print / Save Quote (PDF)</button>
       <button class="reset-btn" onclick="resetAll()">Reset All Selections</button>
     </div>
   </div>
 </div>
+
+<div id="print-quote"></div>
 
 <script>
 /* ---------------- Data model (mirrors Flat Rate Quote Schedule.xlsx) ---------------- */
@@ -1237,14 +1272,16 @@ function _buildDocumentXml(data){
 </w:document>`;
 }
 
-function downloadQuoteDocx(){
+// Shared data-gathering used by both the .docx generator and the print/PDF view,
+// so the two output formats never drift out of sync.
+function gatherQuoteData(){
   const today = new Date();
   const fmt = d => `${(d.getMonth()+1).toString().padStart(2,'0')}/${d.getDate().toString().padStart(2,'0')}/${d.getFullYear()}`;
   const validThru = new Date(today); validThru.setDate(validThru.getDate()+30);
 
   const content = buildQuoteContent();
 
-  const data = {
+  return {
     shopName: document.getElementById('f-shop-name').value,
     shopAddress: document.getElementById('f-shop-address').value,
     shopPhone: document.getElementById('f-shop-phone').value,
@@ -1283,6 +1320,104 @@ function downloadQuoteDocx(){
       'Estimated downtime assumes normal parts availability and no significant discrepancies; delays caused by parts backorder or owner-approved additional work will extend the schedule. This quote is an estimate and actual charges may vary based on aircraft condition and discrepancies found.',
     ],
   };
+}
+
+// ---- Print / Save Quote (PDF) — renders the same navy & gold quote layout
+// used by the .docx download into a hidden container, then triggers the
+// browser's print dialog (which the user can "Save as PDF" from). ----
+function buildPrintQuoteHtml(data){
+  const esc = _esc;
+  const infoRow = (l1,v1,l2,v2) => `<tr><td class="pq-label">${esc(l1)}</td><td>${esc(v1)}</td><td class="pq-label">${esc(l2)}</td><td>${esc(v2)}</td></tr>`;
+
+  const scopeRows = data.scopeItems.map(it => `<tr><td><b>${esc(it.item)}</b></td><td>${esc(it.desc)}</td></tr>`).join('');
+
+  const componentBlock = data.componentLines.length ? `
+    <div class="pq-section">Component Remove &amp; Replace</div>
+    <p class="pq-note">Flat-rate pricing below covers labor for removal and reinstallation of the components selected for this quote. Parts are billed separately at cost plus standard markup (see Terms).</p>
+    <table class="pq-striped pq-comp-table">
+      <tr><th>Component</th><th>Est. Labor Hours</th><th>Flat Labor Price</th></tr>
+      ${data.componentLines.map(l=>`<tr><td>${esc(l.label)}</td><td>${esc(l.hours)}</td><td>${esc(l.price)}</td></tr>`).join('')}
+    </table>` : '';
+
+  const termsList = data.terms.map(t=>`<li>${esc(t)}</li>`).join('');
+
+  return `
+    <div class="pq-header">
+      <div>
+        <p class="pq-shop-name">${esc(data.shopName||'Your Shop Name')}</p>
+        <p class="pq-shop-tagline">${esc(data.preparedBy ? data.preparedBy+' — Certificated Airframe & Powerplant Mechanic' : 'Certificated Airframe & Powerplant Mechanic — Inspection Authorization')}</p>
+      </div>
+      <div class="pq-shop-contact">
+        <div>${esc(data.shopAddress||'')}</div>
+        <div>${esc([data.shopPhone, data.shopEmail].filter(Boolean).join('  |  '))}</div>
+      </div>
+    </div>
+
+    <div class="pq-title-row">
+      <div>
+        <p class="pq-title">Price Quote</p>
+        <p class="pq-subtitle">Annual Inspection — ${esc(data.makeModel||'Aircraft')}</p>
+      </div>
+      <div class="pq-quote-meta">
+        <div><b>Quote Date:</b> ${esc(data.date)}</div>
+        <div><b>Valid Through:</b> ${esc(data.validThru)}</div>
+      </div>
+    </div>
+
+    <div class="pq-section">Aircraft &amp; Customer Information</div>
+    <table class="pq-info-table">
+      ${infoRow('MAKE / MODEL', data.makeModel, 'REGISTRATION', data.registration)}
+      ${infoRow('SERIAL NUMBER', data.serialNumber, 'TOTAL TIME', data.totalTime)}
+      ${infoRow('CUSTOMER', data.customerName, 'PHONE', data.customerPhone)}
+      ${infoRow('ADDRESS', data.customerAddress, 'EMAIL', data.customerEmail)}
+      ${infoRow('PREPARED BY', data.preparedBy, 'QUOTE NO.', data.quoteNo)}
+    </table>
+
+    <div class="pq-section">Inspection Labor &amp; Scope</div>
+    <p class="pq-note">This annual inspection is billed at an hourly labor rate, with estimated hours shown below based on the aircraft configuration selected. Final invoice reflects actual hours worked; any additional discrepancies found during inspection are quoted separately per the policy below.</p>
+    <table class="pq-rate-table">
+      <tr><th>Aircraft Category</th><th>Inspection Type</th><th>Labor Rate</th><th>Est. Hours</th><th>Estimated Labor Total</th></tr>
+      <tr><td>${esc(data.aircraftCategory)}</td><td>Annual Inspection</td><td>${esc(data.rateStr)}</td><td>${esc(data.annualHoursStr)}</td><td><b>${esc(data.laborTotalStr)}</b></td></tr>
+    </table>
+    <table class="pq-striped">
+      <tr><th>Item</th><th>Description of Work</th></tr>
+      ${scopeRows}
+    </table>
+    ${componentBlock}
+
+    <div class="pq-section">Quotation Summary</div>
+    <table class="pq-summary-table">
+      <tr><td>Total Labor Hours</td><td>${esc(data.totalHoursStr)}</td></tr>
+      <tr><td>Labor Rate</td><td>${esc(data.rateStr)}</td></tr>
+      <tr><td>Labor Subtotal</td><td>${esc(data.laborSubtotalStr)}</td></tr>
+      <tr><td>Parts / Materials</td><td>${esc(data.partsStr)}</td></tr>
+      <tr><td class="pq-total">TOTAL QUOTED PRICE</td><td class="pq-total">${esc(data.totalPrice)}</td></tr>
+    </table>
+
+    <div class="pq-section">Schedule</div>
+    <table class="pq-schedule-table">
+      <tr><td class="pq-label">Estimated Downtime</td><td>${esc(data.downtime)}</td></tr>
+      <tr><td class="pq-label">Scheduled Start</td><td>${esc(data.scheduledStart)}</td></tr>
+    </table>
+
+    <div class="pq-section">Discrepancy &amp; Squawk Repair Policy</div>
+    <p class="pq-note">This quote covers the base inspection only. Any airworthiness discrepancies discovered during the inspection will be documented and reviewed with the owner before further work begins. Repair of discrepancies is billed separately at the hourly labor rate above, plus parts. No repair work beyond the inspection scope will be performed without owner authorization.</p>
+
+    <div class="pq-section">Terms &amp; Payment Policy</div>
+    <ul class="pq-terms">${termsList}</ul>
+
+    <div class="pq-footer">Quote valid for 30 days from the date shown above. Thank you for trusting your aircraft's airworthiness to our shop.</div>
+  `;
+}
+
+function printQuote(){
+  const data = gatherQuoteData();
+  document.getElementById('print-quote').innerHTML = buildPrintQuoteHtml(data);
+  window.print();
+}
+
+function downloadQuoteDocx(){
+  const data = gatherQuoteData();
 
   const docXml = _buildDocumentXml(data);
 
