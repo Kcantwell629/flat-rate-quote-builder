@@ -1105,7 +1105,7 @@ function buildQuoteContent(){
   const laborCost = totalHours * rate;
   const totalPrice = fmtMoney(laborCost+parts);
 
-  const downtime = `${annual.days.toFixed(2)} estimated shop days (approx. ${Math.ceil(annual.days)} business days) from aircraft drop-off, barring discrepancies requiring additional repair or parts procurement.`;
+  const downtime = `${annual.days.toFixed(2)} estimated shop days (approx. ${Math.ceil(annual.days)} business days) from the scheduled start date, barring discrepancies requiring additional repair or parts procurement.`;
 
   return {
     scopeItems, componentLines, model,
