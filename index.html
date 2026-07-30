@@ -1417,6 +1417,7 @@ function printQuote(){
 }
 
 function downloadQuoteDocx(){
+  const today = new Date();
   const data = gatherQuoteData();
 
   const docXml = _buildDocumentXml(data);
