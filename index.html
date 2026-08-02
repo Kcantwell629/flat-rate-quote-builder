@@ -373,6 +373,24 @@
   .checklist-item .insp span{font-size:11px; font-weight:700; color:var(--ink-soft); text-transform:uppercase; letter-spacing:0.3px;}
   .checklist-item.inspected{background:#eaf6ec;}
   .checklist-item.inspected .insp span{color:var(--good);}
+  .checklist-progress{margin-bottom:14px;}
+  .checklist-progress-bar{background:var(--paper); border:1.5px solid var(--line); border-radius:20px; height:14px; overflow:hidden;}
+  .checklist-progress-fill{height:100%; width:0%; background:linear-gradient(135deg, var(--good), #2f6636); border-radius:20px; transition:width .2s;}
+  .checklist-progress-label{font-size:12.5px; color:var(--ink-soft); margin-top:6px; font-weight:600;}
+  .text-update-btn{
+    width:100%;
+    margin-top:8px;
+    padding:12px;
+    border:none;
+    border-radius:9px;
+    background:linear-gradient(135deg, var(--good), #2f6636);
+    color:#fff;
+    font-weight:700;
+    font-size:14.5px;
+    cursor:pointer;
+    box-shadow:var(--shadow);
+  }
+  .text-update-btn:hover{filter:brightness(1.05);}
 
   /* ---- Print quote (navy & gold, matches the shop's "annual quote form" reference) ---- */
   #print-quote{display:none;}
@@ -574,8 +592,14 @@
       <div class="card">
         <h2>Inspection Checklist <span class="badge">14 CFR Part 43, Appendix D</span></h2>
         <p class="note">Scope and detail of items to be included in annual and 100-hour inspections (as applicable to the particular aircraft). Click "Inspected" to mark an item complete; click again to clear it.</p>
+        <div class="checklist-progress">
+          <div class="checklist-progress-bar"><div class="checklist-progress-fill" id="checklist-progress-fill"></div></div>
+          <div class="checklist-progress-label" id="checklist-progress-label">0 of 0 inspected (0%)</div>
+        </div>
         <div id="checklist-list"></div>
         <button class="reset-btn" onclick="resetChecklist()">Reset Checklist</button>
+        <button class="text-update-btn" onclick="sendCustomerUpdate()">Text Update to Customer Phone</button>
+        <p class="note">Opens your device's messaging app pre-addressed to the Customer Phone number (Customer &amp; Aircraft panel) with the current progress filled in — you review and tap Send.</p>
       </div>
     </div>
   </div>
@@ -788,6 +812,7 @@ function buildChecklistItemEl(section, num, text){
     input.dataset.wasChecked = next ? 'true' : 'false';
     checklistState[id] = next;
     row.classList.toggle('inspected', next);
+    updateChecklistProgress();
   });
   return row;
 }
@@ -809,11 +834,44 @@ function renderChecklist(){
       el.appendChild(block);
     }
   });
+  updateChecklistProgress();
+}
+
+function checklistTotals(){
+  const total = inspectionChecklist.reduce((s,sec)=> s + (sec.single ? 1 : sec.items.length), 0);
+  const done = Object.values(checklistState).filter(Boolean).length;
+  const pct = total ? Math.round((done/total)*100) : 0;
+  return {total, done, pct};
+}
+
+function updateChecklistProgress(){
+  const {total, done, pct} = checklistTotals();
+  const fill = document.getElementById('checklist-progress-fill');
+  const label = document.getElementById('checklist-progress-label');
+  if(fill) fill.style.width = pct + '%';
+  if(label) label.textContent = `${done} of ${total} inspected (${pct}%)`;
 }
 
 function resetChecklist(){
   Object.keys(checklistState).forEach(k=> checklistState[k]=false);
   renderChecklist();
+}
+
+function sendCustomerUpdate(){
+  const phoneRaw = (document.getElementById('f-customer-phone').value || '').trim();
+  if(!phoneRaw){
+    alert('Enter the Customer Phone number in the Customer & Aircraft panel first.');
+    return;
+  }
+  const phone = phoneRaw.replace(/[^0-9+]/g, '');
+  const {total, done, pct} = checklistTotals();
+  const shop = (document.getElementById('f-shop-name').value || '').trim() || 'Your shop';
+  const tail = (document.getElementById('f-tail').value || '').trim();
+  const aircraftPart = tail ? ` for ${tail}` : '';
+  const msg = `${shop}: Inspection update${aircraftPart} — ${done} of ${total} checklist items complete (${pct}%).`;
+  const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
+  const sep = isIOS ? '&' : '?';
+  window.location.href = `sms:${phone}${sep}body=${encodeURIComponent(msg)}`;
 }
 
 /* ---------------- Rendering ---------------- */
