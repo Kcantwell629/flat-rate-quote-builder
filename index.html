@@ -360,6 +360,20 @@
   }
   .subtle{font-size:12px; color:var(--ink-soft);}
 
+  /* ---- Inspection Checklist panel (FAA Part 43, Appendix D) ---- */
+  .checklist-block{border:1px solid var(--line); border-radius:10px; overflow:hidden; margin-bottom:14px;}
+  .checklist-header{background:#1F3864; color:#fff; font-weight:800; font-size:13.5px; padding:9px 14px; letter-spacing:0.2px;}
+  .checklist-item{display:flex; align-items:flex-start; gap:10px; padding:10px 14px; border-bottom:1px solid var(--line); background:#fff; transition:background .15s;}
+  .checklist-block .checklist-item:last-child{border-bottom:none;}
+  .checklist-item.single{border:1px solid var(--line); border-radius:10px; margin-bottom:14px;}
+  .checklist-item .num{font-weight:700; color:var(--orange-dark); min-width:26px; font-size:13px;}
+  .checklist-item .txt{flex:1; font-size:13px; line-height:1.55; color:var(--ink);}
+  .checklist-item .insp{display:flex; align-items:center; gap:6px; flex:none; cursor:pointer; user-select:none;}
+  .checklist-item .insp input[type=radio]{accent-color:var(--good); width:17px; height:17px; cursor:pointer; margin:0;}
+  .checklist-item .insp span{font-size:11px; font-weight:700; color:var(--ink-soft); text-transform:uppercase; letter-spacing:0.3px;}
+  .checklist-item.inspected{background:#eaf6ec;}
+  .checklist-item.inspected .insp span{color:var(--good);}
+
   /* ---- Print quote (navy & gold, matches the shop's "annual quote form" reference) ---- */
   #print-quote{display:none;}
   #print-quote .pq-header{
@@ -418,6 +432,7 @@
     <div class="tabs">
       <button class="tab-btn active" data-tab="annual">Annual Inspection</button>
       <button class="tab-btn" data-tab="component">Component R&amp;R</button>
+      <button class="tab-btn" data-tab="checklist">Inspection Checklist</button>
     </div>
 
     <!-- ============ ANNUAL INSPECTION PANEL ============ -->
@@ -553,6 +568,16 @@
         <p class="note">* Warranty work: 30 hours or 90 days, whichever occurs first, based on RCM risk curve.</p>
       </div>
     </div>
+
+    <!-- ============ INSPECTION CHECKLIST PANEL ============ -->
+    <div class="panel" id="panel-checklist">
+      <div class="card">
+        <h2>Inspection Checklist <span class="badge">14 CFR Part 43, Appendix D</span></h2>
+        <p class="note">Scope and detail of items to be included in annual and 100-hour inspections (as applicable to the particular aircraft). Click "Inspected" to mark an item complete; click again to clear it.</p>
+        <div id="checklist-list"></div>
+        <button class="reset-btn" onclick="resetChecklist()">Reset Checklist</button>
+      </div>
+    </div>
   </div>
 
   <!-- ============ SIDEBAR SUMMARY ============ -->
@@ -683,6 +708,113 @@ const state = {
 };
 
 const componentItems = []; // {label, hours}
+
+/* ---------------- Inspection Checklist (FAA 14 CFR Part 43, Appendix D) ---------------- */
+
+const inspectionChecklist = [
+  {section:'a', single:true, text:'(a) Preparation. Before inspection, remove or open all necessary inspection plates, access doors, fairing, and cowling. Thoroughly clean the aircraft and aircraft engine.'},
+  {section:'b', title:'(b) Fuselage and Hull Group — inspect (where applicable):', items:[
+    {num:1, text:'Fabric and skin — for deterioration, distortion, other evidence of failure, and defective or insecure attachment of fittings.'},
+    {num:2, text:'Systems and components — for improper installation, apparent defects, and unsatisfactory operation.'},
+    {num:3, text:'Envelope, gas bags, ballast tanks, and related parts — for poor condition.'},
+  ]},
+  {section:'c', title:'(c) Cabin and Cockpit Group — inspect (where applicable):', items:[
+    {num:1, text:'Generally — for uncleanliness and loose equipment that might foul the controls.'},
+    {num:2, text:'Seats and safety belts — for poor condition and apparent defects.'},
+    {num:3, text:'Windows and windshields — for deterioration and breakage.'},
+    {num:4, text:'Instruments — for poor condition, mounting, marking, and (where practicable) improper operation.'},
+    {num:5, text:'Flight and engine controls — for improper installation and improper operation.'},
+    {num:6, text:'Batteries — for improper installation and improper charge.'},
+    {num:7, text:'All systems — for improper installation, poor general condition, apparent and obvious defects, and insecurity of attachment.'},
+  ]},
+  {section:'d', title:'(d) Engine and Nacelle Group — inspect (where applicable):', items:[
+    {num:1, text:'Engine section — for visual evidence of excessive oil, fuel, or hydraulic leaks, and sources of such leaks.'},
+    {num:2, text:'Studs and nuts — for improper torquing and obvious defects.'},
+    {num:3, text:'Internal engine — for cylinder compression and for metal particles or foreign matter on screens and sump drain plugs. If there is weak cylinder compression, for improper internal condition and improper internal tolerances.'},
+    {num:4, text:'Engine mount — for cracks, looseness of mounting, and looseness of engine to mount.'},
+    {num:5, text:'Flexible vibration dampeners — for poor condition and deterioration.'},
+    {num:6, text:'Engine controls — for defects, improper travel, and improper safetying.'},
+    {num:7, text:'Lines, hoses, and clamps — for leaks, improper condition and looseness.'},
+    {num:8, text:'Exhaust stacks — for cracks, defects, and improper attachment.'},
+    {num:9, text:'Accessories — for apparent defects in security of mounting.'},
+    {num:10, text:'All systems — for improper installation, poor general condition, defects, and insecure attachment.'},
+    {num:11, text:'Cowling — for cracks, and defects.'},
+  ]},
+  {section:'e', title:'(e) Landing Gear Group — inspect (where applicable):', items:[
+    {num:1, text:'All units — for poor condition and insecurity of attachment.'},
+    {num:2, text:'Shock absorbing devices — for improper oleo fluid level.'},
+    {num:3, text:'Linkages, trusses, and members — for undue or excessive wear fatigue, and distortion.'},
+    {num:4, text:'Retracting and locking mechanism — for improper operation.'},
+    {num:5, text:'Hydraulic lines — for leakage.'},
+    {num:6, text:'Electrical system — for chafing and improper operation of switches.'},
+    {num:7, text:'Wheels — for cracks, defects, and condition of bearings.'},
+    {num:8, text:'Tires — for wear and cuts.'},
+    {num:9, text:'Brakes — for improper adjustment.'},
+    {num:10, text:'Floats and skis — for insecure attachment and obvious or apparent defects.'},
+  ]},
+  {section:'f', single:true, text:'(f) Wing and Center Section Assembly — inspect (where applicable) all components for poor general condition, fabric or skin deterioration, distortion, evidence of failure, and insecurity of attachment.'},
+  {section:'g', single:true, text:'(g) Empennage Assembly — inspect (where applicable) all components and systems for poor general condition, fabric or skin deterioration, distortion, evidence of failure, insecure attachment, improper component installation, and improper component operation.'},
+  {section:'h', title:'(h) Propeller Group — inspect (where applicable):', items:[
+    {num:1, text:'Propeller assembly — for cracks, nicks, binds, and oil leakage.'},
+    {num:2, text:'Bolts — for improper torquing and lack of safetying.'},
+    {num:3, text:'Anti-icing devices — for improper operations and obvious defects.'},
+    {num:4, text:'Control mechanisms — for improper operation, insecure mounting, and restricted travel.'},
+  ]},
+  {section:'i', title:'(i) Radio Group — inspect (where applicable):', items:[
+    {num:1, text:'Radio and electronic equipment — for improper installation and insecure mounting.'},
+    {num:2, text:'Wiring and conduits — for improper routing, insecure mounting, and obvious defects.'},
+    {num:3, text:'Bonding and shielding — for improper installation and poor condition.'},
+    {num:4, text:'Antenna including trailing antenna — for poor condition, insecure mounting, and improper operation.'},
+  ]},
+  {section:'j', single:true, text:'(j) Miscellaneous Items — inspect (where applicable) each installed miscellaneous item not otherwise covered by this listing for improper installation and improper operation.'},
+];
+
+const checklistState = {}; // id -> boolean, default blank/false for every item
+
+function checklistItemId(section, num){ return num ? section + num : section; }
+
+function buildChecklistItemEl(section, num, text){
+  const id = checklistItemId(section, num);
+  const row = document.createElement('div');
+  row.className = 'checklist-item' + (num ? '' : ' single') + (checklistState[id] ? ' inspected' : '');
+  row.innerHTML = `<div class="num">${num ? '('+num+')' : ''}</div>
+    <div class="txt">${text}</div>
+    <label class="insp"><input type="radio" ${checklistState[id] ? 'checked' : ''}><span>Inspected</span></label>`;
+  const input = row.querySelector('input');
+  input.dataset.wasChecked = checklistState[id] ? 'true' : 'false';
+  input.addEventListener('click', ()=>{
+    const next = input.dataset.wasChecked !== 'true';
+    input.checked = next;
+    input.dataset.wasChecked = next ? 'true' : 'false';
+    checklistState[id] = next;
+    row.classList.toggle('inspected', next);
+  });
+  return row;
+}
+
+function renderChecklist(){
+  const el = document.getElementById('checklist-list');
+  el.innerHTML = '';
+  inspectionChecklist.forEach(sec=>{
+    if(sec.single){
+      el.appendChild(buildChecklistItemEl(sec.section, null, sec.text));
+    } else {
+      const block = document.createElement('div');
+      block.className = 'checklist-block';
+      const header = document.createElement('div');
+      header.className = 'checklist-header';
+      header.textContent = sec.title;
+      block.appendChild(header);
+      sec.items.forEach(it=> block.appendChild(buildChecklistItemEl(sec.section, it.num, it.text)));
+      el.appendChild(block);
+    }
+  });
+}
+
+function resetChecklist(){
+  Object.keys(checklistState).forEach(k=> checklistState[k]=false);
+  renderChecklist();
+}
 
 /* ---------------- Rendering ---------------- */
 
@@ -928,6 +1060,7 @@ function resetAll(){
 
 initComponentHourSelects();
 renderAll();
+renderChecklist();
 
 /* =========================================================================
    DOCX QUOTE GENERATOR
