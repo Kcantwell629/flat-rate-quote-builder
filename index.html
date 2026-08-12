@@ -267,6 +267,28 @@
     font-weight:700;
     margin-left:8px;
   }
+  .fixed-line .hr-group{
+    display:flex;
+    align-items:center;
+    gap:4px;
+    flex:none;
+  }
+  .fixed-line select.hr-select{
+    font-size:12.5px;
+    color:var(--ink);
+    font-weight:600;
+    border:1.5px solid var(--line);
+    border-radius:6px;
+    padding:3px 5px;
+    background:#fff;
+    cursor:pointer;
+    font-variant-numeric:tabular-nums;
+  }
+  .fixed-line select.hr-select:hover{border-color:var(--orange);}
+  .fixed-line .hr-unit{
+    font-size:11.5px;
+    color:var(--ink-soft);
+  }
 
   /* Sidebar summary */
   .summary{
@@ -600,8 +622,8 @@
 
       <div class="card">
         <h2>Included In Every Annual</h2>
-        <div class="fixed-line"><div>AD Research <span class="tag">ALWAYS INCLUDED</span></div><div>8.0 hrs</div></div>
-        <div class="fixed-line" style="margin-top:8px;"><div>Aircraft Wash <span class="tag">ALWAYS INCLUDED</span></div><div>1.0 hr</div></div>
+        <div class="fixed-line"><div>AD Research <span class="tag">ALWAYS INCLUDED</span></div><span class="hr-group"><select class="hr-select" id="f-ad-hrs"></select><span class="hr-unit">hrs</span></span></div>
+        <div class="fixed-line" style="margin-top:8px;"><div>Aircraft Wash <span class="tag">ALWAYS INCLUDED</span></div><span class="hr-group"><select class="hr-select" id="f-wash-hrs"></select><span class="hr-unit">hr</span></span></div>
         <p class="note">
           * Does not include discrepancies found during the inspection.<br>
           * Does not include STCs with ICAs.<br>
@@ -840,6 +862,8 @@ const state = {
   fuselage: 'fl',
   equip: {emp:true, oxy:true, ams:false, tks:false, tail:true, ap:true},
   hourOverrides: defaultHourOverrides(),
+  adHrs: 8,    // AD Research hours, editable 0-16 (default matches original fixed 8.0 hrs)
+  washHrs: 1,  // Aircraft Wash hours, editable 0-8 (default matches original fixed 1.0 hr)
 };
 
 const componentItems = []; // {label, hours}
@@ -1084,18 +1108,18 @@ function calcAnnual(){
     days += it.days;                                          // days always (matches spreadsheet, not user-editable)
   });
 
-  // Always-included baseline
-  hours += 8;  days += 8/8;   // AD Research: 8 hrs = 1 day
-  hours += 1;                 // Wash: 1 hr, no day impact
+  // Always-included baseline (both editable via dropdowns; default 8 hrs / 1 hr)
+  hours += state.adHrs;    days += state.adHrs/8;   // AD Research: 8 hrs = 1 day ratio preserved
+  hours += state.washHrs;                           // Wash: no day impact, same as before
 
   return {hours, days};
 }
 
 // ---- Component R&R hour-override dropdowns (1-9 by default, 1-25 for engine jobs) ----
-function fillHourOptions(id, max){
+function fillHourOptions(id, max, min=1){
   const el = document.getElementById(id);
   let html = '';
-  for(let h=1; h<=max; h++) html += `<option value="${h}">${h}</option>`;
+  for(let h=min; h<=max; h++) html += `<option value="${h}">${h}</option>`;
   el.innerHTML = html;
 }
 function setHourDefault(id, val, max){
@@ -1130,6 +1154,26 @@ function initComponentHourSelects(){
   document.getElementById('c-cyl-type').addEventListener('change', updateCylHoursDefault);
   document.getElementById('c-cyl-qty').addEventListener('change', updateCylHoursDefault);
   document.getElementById('c-cyl-extra').addEventListener('input', updateCylHoursDefault);
+}
+
+// ---- "Included In Every Annual" hour dropdowns (AD Research 0-16, Aircraft Wash 0-8) ----
+function initAnnualFixedHourSelects(){
+  fillHourOptions('f-ad-hrs', 16, 0);
+  fillHourOptions('f-wash-hrs', 8, 0);
+  syncAnnualFixedHourSelects();
+
+  document.getElementById('f-ad-hrs').addEventListener('change', e=>{
+    state.adHrs = parseInt(e.target.value, 10);
+    renderAll();
+  });
+  document.getElementById('f-wash-hrs').addEventListener('change', e=>{
+    state.washHrs = parseInt(e.target.value, 10);
+    renderAll();
+  });
+}
+function syncAnnualFixedHourSelects(){
+  document.getElementById('f-ad-hrs').value = String(state.adHrs);
+  document.getElementById('f-wash-hrs').value = String(state.washHrs);
 }
 function updateCylHoursDefault(){
   const [one, two] = document.getElementById('c-cyl-type').value.split(',').map(Number);
@@ -1222,11 +1266,14 @@ function resetAll(){
   state.gear='gf'; state.wing='wl'; state.fuselage='fl';
   state.equip = {emp:true, oxy:true, ams:false, tks:false, tail:true, ap:true};
   state.hourOverrides = defaultHourOverrides();
+  state.adHrs = 8; state.washHrs = 1;
+  syncAnnualFixedHourSelects();
   componentItems.length = 0;
   renderAll();
 }
 
 initComponentHourSelects();
+initAnnualFixedHourSelects();
 renderAll();
 renderChecklist();
 
